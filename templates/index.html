@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SocialPulse — Trend Analyzer</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ── CSS Variables ─────────────────────────────────── */
+    :root {
+      --bg:        #060b14;
+      --surface:   #0d1526;
+      --surface2:  #111d35;
+      --border:    #1e2f50;
+      --accent:    #38bdf8;
+      --accent2:   #818cf8;
+      --pos:       #34d399;
+      --neg:       #f87171;
+      --neu:       #94a3b8;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --font:      'Syne', sans-serif;
+      --mono:      'DM Mono', monospace;
+      --glow:      0 0 24px rgba(56,189,248,.18);
+    }
+
+    /* ── Reset ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Scrollbar ─────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Background grid ───────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: .25;
+      pointer-events: none;
+    }
+
+    /* ── Header ────────────────────────────────────────── */
+    header {
+      position: relative; z-index: 10;
+      padding: 1.6rem 2rem;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      background: rgba(6,11,20,.85);
+      backdrop-filter: blur(12px);
+    }
+    .logo {
+      display: flex; align-items: center; gap: .75rem;
+    }
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem;
+    }
+    .logo-text { font-size: 1.25rem; font-weight: 800; letter-spacing: -.5px; }
+    .logo-badge {
+      font-family: var(--mono); font-size: .65rem; font-weight: 400;
+      padding: 2px 8px; border-radius: 20px;
+      background: rgba(56,189,248,.12); color: var(--accent);
+      border: 1px solid rgba(56,189,248,.25);
+    }
+
+    /* ── Main layout ───────────────────────────────────── */
+    main {
+      position: relative; z-index: 5;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    /* ── Controls bar ──────────────────────────────────── */
+    .controls {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 1rem;
+      margin-bottom: 2rem;
+      padding: 1.25rem 1.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+    }
+    .controls label { font-size: .78rem; color: var(--muted); font-family: var(--mono); }
+    .sub-checkboxes {
+      display: flex; flex-wrap: wrap; gap: .5rem;
+    }
+    .sub-chip {
+      display: flex; align-items: center; gap: .35rem;
+      padding: .3rem .75rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all .2s;
+      font-size: .78rem;
+      user-select: none;
+    }
+    .sub-chip input { display: none; }
+    .sub-chip.active {
+      background: rgba(56,189,248,.12);
+      border-color: rgba(56,189,248,.4);
+      color: var(--accent);
+    }
+    .sub-chip:hover { border-color: var(--accent); }
+
+    .limit-select {
+      padding: .4rem .9rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--mono); font-size: .82rem;
+      cursor: pointer;
+    }
+    .limit-select:focus { outline: none; border-color: var(--accent); }
+
+    .btn-analyze {
+      margin-left: auto;
+      padding: .55rem 1.5rem;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none; border-radius: 8px;
+      color: #060b14; font-family: var(--font); font-weight: 700; font-size: .88rem;
+      cursor: pointer; letter-spacing: .3px;
+      transition: opacity .2s, transform .15s;
+    }
+    .btn-analyze:hover { opacity: .88; transform: translateY(-1px); }
+    .btn-analyze:active { transform: translateY(0); }
+    .btn-analyze:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+    /* ── Meta bar ──────────────────────────────────────── */
+    .meta-bar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem;
+      margin-bottom: 1.5rem;
+      font-family: var(--mono); font-size: .75rem; color: var(--muted);
+    }
+    .meta-bar span { display: flex; align-items: center; gap: .4rem; }
+    #status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--muted);
+      display: inline-block;
+    }
+    #status-dot.live { background: var(--pos); box-shadow: 0 0 6px var(--pos); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.45 } }
+
+    /* ── KPI cards ─────────────────────────────────────── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem 1.5rem;
+      position: relative; overflow: hidden;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .kpi-card:hover { border-color: var(--accent); box-shadow: var(--glow); }
+    .kpi-card::after {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      opacity: 0; transition: opacity .2s;
+    }
+    .kpi-card:hover::after { opacity: 1; }
+    .kpi-label { font-size: .72rem; font-family: var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .8px; }
+    .kpi-value { font-size: 2rem; font-weight: 800; margin: .3rem 0 .15rem; line-height: 1; }
+    .kpi-sub { font-size: .72rem; color: var(--muted); font-family: var(--mono); }
+    .kpi-positive .kpi-value { color: var(--pos); }
+    .kpi-negative .kpi-value { color: var(--neg); }
+    .kpi-accent   .kpi-value { color: var(--accent); }
+    .kpi-accent2  .kpi-value { color: var(--accent2); }
+
+    /* ── Chart grid ────────────────────────────────────── */
+    .chart-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    @media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
+
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.5rem;
+    }
+    .chart-card.full-width { grid-column: 1 / -1; }
+
+    .card-title {
+      font-size: .82rem; font-weight: 700; letter-spacing: .5px;
+      text-transform: uppercase; color: var(--muted);
+      margin-bottom: 1.2rem;
+      display: flex; align-items: center; gap: .5rem;
+    }
+    .card-title-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .canvas-wrap { position: relative; height: 280px; }
+    .canvas-wrap canvas { max-height: 280px; }
+
+    /* ── Word cloud ────────────────────────────────────── */
+    #wordcloud-img {
+      width: 100%; border-radius: 8px;
+      min-height: 200px;
+      object-fit: cover;
+    }
+    .wc-placeholder {
+      height: 220px; display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-family: var(--mono); font-size: .82rem;
+    }
+
+    /* ── Top posts table ───────────────────────────────── */
+    .posts-table {
+      width: 100%; border-collapse: collapse;
+      font-size: .82rem;
+    }
+    .posts-table th {
+      text-align: left; padding: .6rem .75rem;
+      font-family: var(--mono); font-size: .7rem; text-transform: uppercase;
+      letter-spacing: .5px; color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .posts-table td {
+      padding: .75rem;
+      border-bottom: 1px solid rgba(30,47,80,.5);
+      vertical-align: top;
+      line-height: 1.5;
+    }
+    .posts-table tr:hover td { background: rgba(56,189,248,.04); }
+    .posts-table a { color: var(--accent); text-decoration: none; }
+    .posts-table a:hover { text-decoration: underline; }
+
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 20px;
+      font-size: .68rem; font-family: var(--mono);
+    }
+    .badge.positive { background: rgba(52,211,153,.15); color: var(--pos); border: 1px solid rgba(52,211,153,.25); }
+    .badge.negative { background: rgba(248,113,113,.15); color: var(--neg); border: 1px solid rgba(248,113,113,.25); }
+    .badge.neutral  { background: rgba(148,163,184,.12); color: var(--neu); border: 1px solid rgba(148,163,184,.2); }
+
+    /* ── Loading overlay ───────────────────────────────── */
+    #loading {
+      display: none;
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(6,11,20,.8);
+      backdrop-filter: blur(6px);
+      align-items: center; justify-content: center;
+      flex-direction: column; gap: 1rem;
+    }
+    #loading.show { display: flex; }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-family: var(--mono); font-size: .82rem; color: var(--muted); }
+
+    /* ── Error toast ───────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 200;
+      background: rgba(248,113,113,.15);
+      border: 1px solid rgba(248,113,113,.35);
+      color: var(--neg); padding: .75rem 1.25rem; border-radius: 10px;
+      font-size: .82rem; font-family: var(--mono);
+      transform: translateY(60px); opacity: 0;
+      transition: all .3s;
+      max-width: 320px;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+
+    /* ── Keyword bar ───────────────────────────────────── */
+    .kw-list { display: flex; flex-direction: column; gap: .55rem; max-height: 280px; overflow-y: auto; }
+    .kw-row { display: flex; align-items: center; gap: .75rem; font-size: .8rem; }
+    .kw-word { width: 120px; flex-shrink: 0; font-family: var(--mono); color: var(--text); }
+    .kw-bar-bg { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; }
+    .kw-bar { height: 100%; border-radius: 3px; background: linear-gradient(90deg,var(--accent),var(--accent2)); transition: width .6s ease; }
+    .kw-count { width: 32px; text-align: right; font-family: var(--mono); font-size: .72rem; color: var(--muted); }
+
+    /* ── Footer ────────────────────────────────────────── */
+    footer {
+      position: relative; z-index: 5;
+      text-align: center; padding: 2rem;
+      font-family: var(--mono); font-size: .72rem; color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text">Fetching & analyzing trends…</div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">📊</div>
+    <span class="logo-text">SocialPulse</span>
+    <span class="logo-badge">TREND ANALYZER</span>
+  </div>
+  <span style="font-family:var(--mono);font-size:.75rem;color:var(--muted);">
+    Powered by Reddit API + VADER NLP
+  </span>
+</header>
+
+<!-- Main -->
+<main>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div>
+      <div class="label" style="font-size:.72rem;color:var(--muted);font-family:var(--mono);margin-bottom:.4rem;">SUBREDDITS</div>
+      <div class="sub-checkboxes" id="sub-chips"></div>
+    </div>
+    <div>
+      <div class="label" style="font-size:.72rem;color:var(--muted);font-family:var(--mono);margin-bottom:.4rem;">POSTS LIMIT</div>
+      <select class="limit-select" id="limit-select">
+        <option value="25">25 posts</option>
+        <option value="50" selected>50 posts</option>
+        <option value="75">75 posts</option>
+        <option value="100">100 posts</option>
+      </select>
+    </div>
+    <button class="btn-analyze" id="btn-analyze" onclick="runAnalysis()">
+      ⚡ Analyze Now
+    </button>
+  </div>
+
+  <!-- Meta bar -->
+  <div class="meta-bar">
+    <span><span id="status-dot"></span><span id="status-text">Idle</span></span>
+    <span>📅 <span id="meta-time">—</span></span>
+    <span>📝 <span id="meta-posts">—</span> posts analyzed</span>
+    <span>🔗 Data: Reddit (r/hot)</span>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid">
+    <div class="kpi-card kpi-positive">
+      <div class="kpi-label">Positive Sentiment</div>
+      <div class="kpi-value" id="kpi-pos">—</div>
+      <div class="kpi-sub" id="kpi-pos-pct">— % of posts</div>
+    </div>
+    <div class="kpi-card kpi-negative">
+      <div class="kpi-label">Negative Sentiment</div>
+      <div class="kpi-value" id="kpi-neg">—</div>
+      <div class="kpi-sub" id="kpi-neg-pct">— % of posts</div>
+    </div>
+    <div class="kpi-card kpi-accent">
+      <div class="kpi-label">Neutral Sentiment</div>
+      <div class="kpi-value" id="kpi-neu">—</div>
+      <div class="kpi-sub" id="kpi-neu-pct">— % of posts</div>
+    </div>
+    <div class="kpi-card kpi-accent2">
+      <div class="kpi-label">Avg Sentiment Score</div>
+      <div class="kpi-value" id="kpi-avg">—</div>
+      <div class="kpi-sub">–1.0 (neg) → +1.0 (pos)</div>
+    </div>
+  </div>
+
+  <!-- All-time database stats (SQLite history) -->
+  <div class="chart-card" style="margin-bottom:1rem;">
+    <div class="card-title"><span class="card-title-dot"></span>All-Time Database Stats (SQLite)</div>
+    <div style="display:flex;flex-wrap:wrap;gap:2rem;font-family:var(--mono);">
+      <div><span style="color:var(--muted);font-size:.75rem;">TOTAL POSTS EVER SAVED</span><br><span style="font-size:1.4rem;font-weight:700;color:var(--accent);" id="db-total">—</span></div>
+      <div><span style="color:var(--muted);font-size:.75rem;">ALL-TIME POSITIVE</span><br><span style="font-size:1.4rem;font-weight:700;color:var(--pos);" id="db-pos">—</span></div>
+      <div><span style="color:var(--muted);font-size:.75rem;">ALL-TIME NEGATIVE</span><br><span style="font-size:1.4rem;font-weight:700;color:var(--neg);" id="db-neg">—</span></div>
+      <div><span style="color:var(--muted);font-size:.75rem;">ALL-TIME NEUTRAL</span><br><span style="font-size:1.4rem;font-weight:700;color:var(--neu);" id="db-neu">—</span></div>
+    </div>
+  </div>
+
+  <!-- Charts row 1 -->
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="card-title"><span class="card-title-dot"></span>Sentiment Distribution</div>
+      <div class="canvas-wrap"><canvas id="chart-sentiment"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="card-title"><span class="card-title-dot"></span>Subreddit Distribution</div>
+      <div class="canvas-wrap"><canvas id="chart-subreddit"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Charts row 2 -->
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="card-title"><span class="card-title-dot"></span>Avg Sentiment by Subreddit</div>
+      <div class="canvas-wrap"><canvas id="chart-sub-sentiment"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="card-title"><span class="card-title-dot"></span>Top Keywords / Hashtags</div>
+      <div id="kw-container"><div class="kw-list" id="kw-list"></div></div>
+    </div>
+  </div>
+
+  <!-- Word Cloud (full width) -->
+  <div class="chart-grid" style="margin-bottom:1rem;">
+    <div class="chart-card full-width">
+      <div class="card-title"><span class="card-title-dot"></span>Trending Word Cloud</div>
+      <div id="wc-wrap">
+        <div class="wc-placeholder">Run analysis to generate word cloud…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Posts Table -->
+  <div class="chart-card">
+    <div class="card-title"><span class="card-title-dot"></span>Top Trending Posts</div>
+    <div style="overflow-x:auto;">
+      <table class="posts-table" id="posts-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Title</th>
+            <th>Subreddit</th>
+            <th>Score</th>
+            <th>Comments</th>
+            <th>Sentiment</th>
+            <th>Score</th>
+            <th>Posted</th>
+          </tr>
+        </thead>
+        <tbody id="posts-tbody">
+          <tr><td colspan="8" style="color:var(--muted);font-family:var(--mono);text-align:center;padding:2rem;">
+            Click "Analyze Now" to load trending posts…
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  SocialPulse Trend Analyzer &nbsp;·&nbsp; Built with Python, Flask, PRAW, VADER NLP, SQLite, Chart.js
+  &nbsp;·&nbsp; Data sourced from Reddit public API
+</footer>
+
+
+<script>
+/* ── State ───────────────────────────────────────────── */
+const SUBREDDITS_ALL = [
+  "technology","worldnews","business","science","programming",
+  "artificial","MachineLearning","stocks","politics","gaming"
+];
+let selectedSubs = new Set(["technology","worldnews","business","science","programming"]);
+let charts = {};
+
+/* ── Init ────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  buildSubChips();
+  runAnalysis();   // auto-run on load
+});
+
+/* ── Build subreddit chips ───────────────────────────── */
+function buildSubChips() {
+  const container = document.getElementById('sub-chips');
+  container.innerHTML = '';
+  SUBREDDITS_ALL.forEach(sub => {
+    const chip = document.createElement('label');
+    chip.className = 'sub-chip' + (selectedSubs.has(sub) ? ' active' : '');
+    chip.innerHTML = `<input type="checkbox" ${selectedSubs.has(sub)?'checked':''} value="${sub}"> r/${sub}`;
+    chip.addEventListener('click', () => {
+      if (selectedSubs.has(sub)) selectedSubs.delete(sub);
+      else selectedSubs.add(sub);
+      chip.classList.toggle('active');
+    });
+    container.appendChild(chip);
+  });
+}
+
+/* ── Run analysis ────────────────────────────────────── */
+async function runAnalysis() {
+  if (selectedSubs.size === 0) { showToast('Select at least one subreddit.'); return; }
+
+  const btn = document.getElementById('btn-analyze');
+  const loading = document.getElementById('loading');
+  btn.disabled = true;
+  loading.classList.add('show');
+
+  const subs = [...selectedSubs].join(',');
+  const limit = document.getElementById('limit-select').value;
+
+  try {
+    const res = await fetch(`/api/analyze?subreddits=${subs}&limit=${limit}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    renderDashboard(data);
+  } catch (err) {
+    showToast('Analysis failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    loading.classList.remove('show');
+  }
+}
+
+/* ── Render dashboard ────────────────────────────────── */
+function renderDashboard(data) {
+  // Status
+  document.getElementById('status-dot').className = 'live';
+  document.getElementById('status-text').textContent = 'Live';
+  document.getElementById('meta-time').textContent = data.meta.fetched_at;
+  document.getElementById('meta-posts').textContent = data.meta.total_posts;
+
+  // KPIs
+  const s = data.sentiment_summary;
+  setText('kpi-pos', s.positive);
+  setText('kpi-pos-pct', `${s.positive_pct}% of posts`);
+  setText('kpi-neg', s.negative);
+  setText('kpi-neg-pct', `${s.negative_pct}% of posts`);
+  setText('kpi-neu', s.neutral);
+  setText('kpi-neu-pct', `${s.neutral_pct}% of posts`);
+  setText('kpi-avg', s.avg_score > 0 ? '+' + s.avg_score : s.avg_score);
+
+  // All-time DB stats
+  if (data.all_time) {
+    setText('db-total', data.all_time.total_posts_ever);
+    setText('db-pos', data.all_time.sentiment_counts.positive ?? 0);
+    setText('db-neg', data.all_time.sentiment_counts.negative ?? 0);
+    setText('db-neu', data.all_time.sentiment_counts.neutral ?? 0);
+  }
+
+  // Charts
+  renderSentimentDonut(s);
+  renderSubredditBar(data.subreddit_distribution);
+  renderSubSentimentBar(data.sentiment_by_subreddit);
+  renderKeywords(data.keywords);
+  renderWordCloud(data.wordcloud);
+  renderPostsTable(data.top_posts);
+}
+
+/* ── Chart helpers ───────────────────────────────────── */
+function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+const COLORS = {
+  pos:  'rgba(52,211,153,.85)',
+  neg:  'rgba(248,113,113,.85)',
+  neu:  'rgba(148,163,184,.65)',
+  acc:  'rgba(56,189,248,.85)',
+  acc2: 'rgba(129,140,248,.85)',
+};
+
+function chartDefaults() {
+  return {
+    plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'DM Mono', size: 11 } } } },
+    scales: {}
+  };
+}
+
+function renderSentimentDonut(s) {
+  destroyChart('sentiment');
+  const ctx = document.getElementById('chart-sentiment').getContext('2d');
+  charts['sentiment'] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Positive', 'Negative', 'Neutral'],
+      datasets: [{ data: [s.positive, s.negative, s.neutral],
+        backgroundColor: [COLORS.pos, COLORS.neg, COLORS.neu],
+        borderColor: '#0d1526', borderWidth: 3,
+        hoverOffset: 8 }]
+    },
+    options: {
+      cutout: '68%', responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { color: '#94a3b8', font: { family: 'DM Mono', size: 11 }, padding: 14 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw} posts (${((ctx.raw/s.total)*100).toFixed(1)}%)` } }
+      }
+    }
+  });
+}
+
+function renderSubredditBar(dist) {
+  destroyChart('subreddit');
+  const ctx = document.getElementById('chart-subreddit').getContext('2d');
+  const labels = dist.map(d => 'r/' + d.subreddit);
+  const vals   = dist.map(d => d.count);
+  const colors = ['#38bdf8','#818cf8','#34d399','#fb923c','#f472b6','#a78bfa','#67e8f9','#86efac','#fcd34d','#f87171'];
+  charts['subreddit'] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ data: vals, backgroundColor: colors.slice(0, labels.length), borderRadius: 6, borderSkipped: false }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#64748b', font: { family: 'DM Mono', size: 10 } }, grid: { color: 'rgba(30,47,80,.5)' } },
+        y: { ticks: { color: '#64748b', font: { family: 'DM Mono', size: 10 } }, grid: { color: 'rgba(30,47,80,.5)' } }
+      }
+    }
+  });
+}
+
+function renderSubSentimentBar(subData) {
+  destroyChart('sub-sentiment');
+  const ctx = document.getElementById('chart-sub-sentiment').getContext('2d');
+  const labels = subData.map(d => 'r/' + d.subreddit);
+  const vals   = subData.map(d => d.avg_sentiment);
+  const bgs    = vals.map(v => v >= 0 ? 'rgba(52,211,153,.75)' : 'rgba(248,113,113,.75)');
+  charts['sub-sentiment'] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Avg Sentiment', data: vals, backgroundColor: bgs, borderRadius: 5, borderSkipped: false }] },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { min: -1, max: 1, ticks: { color: '#64748b', font: { family: 'DM Mono', size: 10 } }, grid: { color: 'rgba(30,47,80,.5)' } },
+        y: { ticks: { color: '#94a3b8', font: { family: 'DM Mono', size: 10 } }, grid: { color: 'rgba(30,47,80,.3)' } }
+      }
+    }
+  });
+}
+
+function renderKeywords(keywords) {
+  const list = document.getElementById('kw-list');
+  if (!keywords.length) { list.innerHTML = '<div style="color:var(--muted);font-family:var(--mono);font-size:.8rem;">No keywords found.</div>'; return; }
+  const max = keywords[0].count;
+  list.innerHTML = keywords.map(k => `
+    <div class="kw-row">
+      <span class="kw-word">${k.word}</span>
+      <div class="kw-bar-bg"><div class="kw-bar" style="width:${(k.count/max*100).toFixed(1)}%"></div></div>
+      <span class="kw-count">${k.count}</span>
+    </div>`).join('');
+}
+
+function renderWordCloud(b64) {
+  const wrap = document.getElementById('wc-wrap');
+  if (!b64) { wrap.innerHTML = '<div class="wc-placeholder">Word cloud unavailable.</div>'; return; }
+  wrap.innerHTML = `<img id="wordcloud-img" src="data:image/png;base64,${b64}" alt="Word Cloud" />`;
+}
+
+function renderPostsTable(posts) {
+  const tbody = document.getElementById('posts-tbody');
+  if (!posts.length) { tbody.innerHTML = '<tr><td colspan="8" style="color:var(--muted);text-align:center;padding:2rem;">No posts.</td></tr>'; return; }
+  tbody.innerHTML = posts.map((p, i) => {
+    const score = p.sentiment_score;
+    const label = p.sentiment_label;
+    const scoreStr = score > 0 ? `+${score}` : `${score}`;
+    return `<tr>
+      <td style="color:var(--muted);font-family:var(--mono);">${i+1}</td>
+      <td><a href="${p.url}" target="_blank" rel="noopener">${escHtml(p.title)}</a></td>
+      <td style="font-family:var(--mono);color:var(--accent);font-size:.75rem;">r/${p.subreddit}</td>
+      <td style="font-family:var(--mono);color:var(--pos);">${p.score.toLocaleString()}</td>
+      <td style="font-family:var(--mono);">${p.comments.toLocaleString()}</td>
+      <td><span class="badge ${label}">${label}</span></td>
+      <td style="font-family:var(--mono);color:${score>=0.05?'var(--pos)':score<=-0.05?'var(--neg)':'var(--muted)'};">${scoreStr}</td>
+      <td style="font-family:var(--mono);font-size:.72rem;color:var(--muted);">${p.created_utc}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── Utilities ───────────────────────────────────────── */
+function setText(id, val) { document.getElementById(id).textContent = val; }
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 4000);
+}
+</script>
+</body>
+</html>
