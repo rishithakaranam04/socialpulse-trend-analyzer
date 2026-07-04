@@ -12,7 +12,7 @@ from flask import Flask, render_template, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-from utils.reddit_scraper import fetch_trending_posts, extract_keywords
+from utils.news_scraper import fetch_trending_posts, extract_keywords
 from utils.sentiment_analyzer import analyze_all, aggregate_sentiment, sentiment_by_subreddit
 from utils.wordcloud_gen import generate_wordcloud_base64
 from database.db import init_db, save_posts, get_recent_posts, get_sentiment_counts, get_total_post_count
@@ -27,7 +27,7 @@ CORS(app)
 init_db()
 
 DEFAULT_SUBREDDITS = os.getenv(
-    "DEFAULT_SUBREDDITS",
+    "DEFAULT_CATEGORIES",
     "technology,worldnews,business,science,programming"
 ).split(",")
 
@@ -80,7 +80,20 @@ def analyze():
     for p in analyzed:
         sub_dist[p["subreddit"]] = sub_dist.get(p["subreddit"], 0) + 1
 
-    top_posts = sorted(analyzed, key=lambda x: x["score"], reverse=True)[:10]
+    def _interleave_by_category(posts, total=10):
+        buckets = {}
+        for p in posts:
+            buckets.setdefault(p["subreddit"], []).append(p)
+        result = []
+        while len(result) < total and any(buckets.values()):
+            for key in list(buckets.keys()):
+                if buckets[key]:
+                    result.append(buckets[key].pop(0))
+                if len(result) >= total:
+                    break
+        return result
+
+    top_posts = _interleave_by_category(analyzed, total=10)
 
     return jsonify({
         "status": "ok",
